@@ -31,4 +31,6 @@ export interface BoundaryData {
   coordinates: number[][][];
   name: string;
   center: [number, number];
+  area?: number; // Area in km²
+  countryCode?: string; // ISO country code for flag
 }

@@ -3,6 +3,7 @@ import SearchBox from './components/SearchBox';
 import Map from './components/Map';
 import { NominatimResult, BoundaryData } from './types';
 import { fetchBoundary } from './services/geocoding';
+import { calculateArea, formatArea, extractCountryCode, getFlagEmoji } from './utils/helpers';
 import './App.css';
 
 const App: React.FC = () => {
@@ -19,6 +20,10 @@ const App: React.FC = () => {
       
       if (boundaryData) {
         boundaryData.name = result.display_name;
+        // Calculate area
+        boundaryData.area = calculateArea(boundaryData.coordinates);
+        // Extract country code for flag
+        boundaryData.countryCode = extractCountryCode(result.display_name);
         setBoundaries(prev => [...prev, boundaryData]);
       } else {
         setError('No boundary data found for this location. Try searching for a different place.');
@@ -32,12 +37,20 @@ const App: React.FC = () => {
 
   const handleBoundaryUpdate = useCallback((index: number, newCoordinates: number[][][]) => {
     setBoundaries(prev => 
-      prev.map((boundary, i) => 
-        i === index 
-          ? { ...boundary, coordinates: newCoordinates }
-          : boundary
-      )
+      prev.map((boundary, i) => {
+        if (i === index) {
+          const updated = { ...boundary, coordinates: newCoordinates };
+          // Recalculate area when boundary is moved
+          updated.area = calculateArea(newCoordinates);
+          return updated;
+        }
+        return boundary;
+      })
     );
+  }, []);
+
+  const removeBoundary = useCallback((index: number) => {
+    setBoundaries(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   const clearBoundaries = useCallback(() => {
@@ -47,31 +60,71 @@ const App: React.FC = () => {
 
   return (
     <div className="app">
-      <div className="header">
-        <h1>True Size Of</h1>
-        <p>Compare the true size of locations by dragging boundaries across the map</p>
+      {/* Floating Sidebar */}
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <h1>The True Size Of...</h1>
+        </div>
+        
+        <div className="sidebar-content">
+          <SearchBox onLocationSelect={handleLocationSelect} isLoading={isLoading} />
+          
+          {error && (
+            <div className="error-message">
+              {error}
+              <button onClick={() => setError(null)} className="error-close">×</button>
+            </div>
+          )}
+          
+          {boundaries.length > 0 && (
+            <div className="boundaries-list">
+              {boundaries.map((boundary, index) => (
+                <div key={index} className="boundary-card">
+                  <div className="boundary-header">
+                    <span className="boundary-flag">
+                      {getFlagEmoji(boundary.countryCode)}
+                    </span>
+                    <span className="boundary-name">{boundary.name}</span>
+                    <button 
+                      className="boundary-remove"
+                      onClick={() => removeBoundary(index)}
+                      aria-label="Remove boundary"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {boundary.area && (
+                    <div className="boundary-stats">
+                      <div className="stat-item">
+                        <span className="stat-icon">📐</span>
+                        <span className="stat-value">{formatArea(boundary.area)}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {boundaries.length > 0 && (
+            <button onClick={clearBoundaries} className="clear-all-button">
+              Clear All
+            </button>
+          )}
+        </div>
+        
+        <div className="sidebar-footer">
+          <div className="footer-links">
+            <a href="#about">About</a>
+            <a href="#how-it-works">How it works</a>
+          </div>
+          <div className="copyright">
+            © {new Date().getFullYear()} True Size Of. All rights reserved.
+          </div>
+        </div>
       </div>
       
-      <SearchBox onLocationSelect={handleLocationSelect} isLoading={isLoading} />
-      
-      {error && (
-        <div className="error-message">
-          {error}
-          <button onClick={() => setError(null)} className="error-close">×</button>
-        </div>
-      )}
-      
-      {boundaries.length > 0 && (
-        <div className="controls">
-          <button onClick={clearBoundaries} className="clear-button">
-            Clear All Boundaries
-          </button>
-          <span className="boundary-count">
-            {boundaries.length} location{boundaries.length !== 1 ? 's' : ''} loaded
-          </span>
-        </div>
-      )}
-      
+      {/* Map Container */}
       <div className="map-container">
         {isLoading ? (
           <div className="loading">Loading boundary data...</div>
@@ -82,13 +135,6 @@ const App: React.FC = () => {
           />
         )}
       </div>
-      
-      {boundaries.length === 0 && !isLoading && (
-        <div className="info-text">
-          Search for a location to see its boundary on the map. 
-          You can then drag the boundary to compare sizes with other regions.
-        </div>
-      )}
     </div>
   );
 };
