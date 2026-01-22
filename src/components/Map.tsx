@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapContainer, TileLayer } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import DraggablePolygon from './DraggablePolygon';
 import { BoundaryData } from '../types';
@@ -42,6 +42,54 @@ const tileProviders = {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
   }
+};
+
+// Component to handle auto-zooming and centering when boundaries change
+const MapBoundsController: React.FC<{ boundaries: BoundaryData[] }> = ({ boundaries }) => {
+  const map = useMap();
+  const previousCountRef = useRef<number>(0);
+
+  useEffect(() => {
+    // Only adjust view when a new boundary is added (length increased)
+    if (boundaries.length > 0 && boundaries.length > previousCountRef.current) {
+      previousCountRef.current = boundaries.length;
+
+      // Calculate bounds from all boundaries
+      const allBounds: L.LatLngBounds = new L.LatLngBounds([]);
+      let hasValidBounds = false;
+
+      boundaries.forEach(boundary => {
+        boundary.coordinates.forEach(ring => {
+          ring.forEach(coord => {
+            // coord is [lon, lat]
+            const lat = coord[1];
+            const lon = coord[0];
+            if (!isNaN(lat) && !isNaN(lon) && isFinite(lat) && isFinite(lon)) {
+              allBounds.extend([lat, lon]);
+              hasValidBounds = true;
+            }
+          });
+        });
+      });
+
+      if (hasValidBounds && allBounds.isValid()) {
+        // Fit bounds with some padding for better UX
+        map.fitBounds(allBounds, {
+          padding: [50, 50], // 50px padding on all sides
+          maxZoom: 15 // Don't zoom in too much for very small areas
+        });
+      }
+    } else if (boundaries.length === 0 && previousCountRef.current > 0) {
+      // Reset to default view when all boundaries are cleared
+      previousCountRef.current = 0;
+      map.setView([51.505, -0.09], 13);
+    } else if (boundaries.length < previousCountRef.current) {
+      // Update count when boundaries are removed
+      previousCountRef.current = boundaries.length;
+    }
+  }, [boundaries, map]);
+
+  return null; // This component doesn't render anything
 };
 
 const Map: React.FC<MapProps> = ({ boundaries, onBoundaryUpdate }) => {
@@ -87,6 +135,8 @@ const Map: React.FC<MapProps> = ({ boundaries, onBoundaryUpdate }) => {
           {...(('subdomains' in currentTile) && { subdomains: (currentTile as any).subdomains })}
           maxZoom={20}
         />
+        
+        <MapBoundsController boundaries={boundaries} />
         
         {boundaries.map((boundary, index) => (
           <DraggablePolygon
