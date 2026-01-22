@@ -7,6 +7,32 @@ const OVERPASS_SERVERS = [
   'https://overpass.kumi.systems/api/interpreter'
 ];
 
+// Simplify geometry by reducing point count (Douglas-Peucker-like simplification)
+const simplifyGeometry = (coords: number[][], tolerance: number = 0.0001): number[][] => {
+  if (coords.length <= 2) return coords;
+  
+  // Simple distance-based simplification
+  const simplified: number[][] = [coords[0]];
+  
+  for (let i = 1; i < coords.length - 1; i++) {
+    const prev = coords[i - 1];
+    const curr = coords[i];
+    const next = coords[i + 1];
+    
+    // Calculate distance from current point to line between prev and next
+    const dx = next[0] - prev[0];
+    const dy = next[1] - prev[1];
+    const dist = Math.abs((dy * curr[0] - dx * curr[1] + next[0] * prev[1] - next[1] * prev[0]) / Math.sqrt(dx * dx + dy * dy));
+    
+    if (dist > tolerance) {
+      simplified.push(curr);
+    }
+  }
+  
+  simplified.push(coords[coords.length - 1]);
+  return simplified;
+};
+
 export const searchLocation = async (query: string): Promise<NominatimResult[]> => {
   try {
     const response = await axios.get(`${NOMINATIM_BASE_URL}/search`, {
@@ -25,53 +51,99 @@ export const searchLocation = async (query: string): Promise<NominatimResult[]> 
 
 export const fetchBoundary = async (osmId: number, osmType: string): Promise<BoundaryData | null> => {
   try {
-    // Try Overpass API first
-    const query = `
+    // Try Overpass API first - handle both relations and ways
+    // Most administrative boundaries are relations (multi-polygons)
+    const queries = [
+      // Try as relation first (most common for admin boundaries)
+      `
+      [out:json][timeout:25];
+      (
+        relation(${osmId});
+      );
+      (._;>;);
+      out geom;
+      `,
+      // Fallback: try as way
+      `
+      [out:json][timeout:25];
+      (
+        way(${osmId});
+      );
+      (._;>;);
+      out geom;
+      `,
+      // Original simple query as last resort
+      `
       [out:json][timeout:15];
       ${osmType}(${osmId});
       out geom;
-    `;
+      `
+    ];
 
-    for (const server of OVERPASS_SERVERS) {
-      try {
-        const response = await axios.get(server, {
-          params: { data: query.trim() },
-          timeout: 20000
-        });
-
-        const data: OverpassResponse = response.data;
-        
-        if (data.elements && data.elements.length > 0) {
-          const coordinates: number[][][] = [];
-          let center: [number, number] = [0, 0];
-          let totalPoints = 0;
-
-          data.elements.forEach(element => {
-            if (element.geometry && element.geometry.length > 0) {
-              const coords = element.geometry.map(point => [point.lon, point.lat]);
-              coordinates.push(coords);
-              
-              element.geometry.forEach(point => {
-                center[0] += point.lon;
-                center[1] += point.lat;
-                totalPoints++;
-              });
-            }
+    for (const query of queries) {
+      for (const server of OVERPASS_SERVERS) {
+        try {
+          const response = await axios.post(server, query.trim(), {
+            headers: {
+              'Content-Type': 'text/plain',
+            },
+            timeout: 30000
           });
 
-          if (coordinates.length > 0) {
-            center[0] /= totalPoints;
-            center[1] /= totalPoints;
+          const data: OverpassResponse = response.data;
+          
+          if (data.elements && data.elements.length > 0) {
+            const coordinates: number[][][] = [];
+            let center: [number, number] = [0, 0];
+            let totalPoints = 0;
 
-            return {
-              coordinates,
-              name: `Location ${osmId}`,
-              center
-            };
+            // Process all elements - handle both relations and ways
+            // The Overpass query with (._;>;) already expands relations to include member geometries
+            data.elements.forEach(element => {
+              if (element.geometry && element.geometry.length > 0) {
+                let coords = element.geometry.map(point => [point.lon, point.lat]);
+                
+                // Simplify geometry if it has too many points (improve performance)
+                if (coords.length > 1000) {
+                  coords = simplifyGeometry(coords, 0.0001);
+                  console.log(`Simplified geometry from ${element.geometry.length} to ${coords.length} points`);
+                }
+                
+                // Ensure polygon is closed (first point = last point)
+                if (coords.length > 0) {
+                  const firstCoord = coords[0];
+                  const lastCoord = coords[coords.length - 1];
+                  if (firstCoord[0] !== lastCoord[0] || firstCoord[1] !== lastCoord[1]) {
+                    coords.push([firstCoord[0], firstCoord[1]]);
+                  }
+                }
+                coordinates.push(coords);
+                
+                element.geometry.forEach(point => {
+                  center[0] += point.lon;
+                  center[1] += point.lat;
+                  totalPoints++;
+                });
+              }
+            });
+
+            if (coordinates.length > 0) {
+              center[0] /= totalPoints;
+              center[1] /= totalPoints;
+
+              console.log(`Successfully fetched boundary for ${osmType} ${osmId}: ${coordinates.length} rings, ${totalPoints} points`);
+              
+              return {
+                coordinates,
+                name: `Location ${osmId}`,
+                center
+              };
+            }
           }
+        } catch (error: any) {
+          console.warn(`Overpass query failed on ${server}:`, error.message);
+          continue; // Try next server
         }
-      } catch (error) {
-        continue; // Try next server
       }
     }
 

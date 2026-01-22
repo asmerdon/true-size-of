@@ -9,6 +9,32 @@ interface DraggablePolygonProps {
   onDragEnd?: (newCoordinates: number[][][]) => void;
 }
 
+// Calculate center of polygon
+const calculateCenter = (positions: L.LatLng[][]): L.LatLng => {
+  let totalLat = 0;
+  let totalLng = 0;
+  let count = 0;
+  
+  positions.forEach(ring => {
+    ring.forEach(pos => {
+      totalLat += pos.lat;
+      totalLng += pos.lng;
+      count++;
+    });
+  });
+  
+  return new L.LatLng(totalLat / count, totalLng / count);
+};
+
+// Mercator projection scale factor to maintain true area
+// In Mercator, area scales as 1/cos(lat)^2, so to maintain area we scale by cos(original_lat)/cos(new_lat)
+const getMercatorScale = (originalLat: number, newLat: number): number => {
+  const originalCos = Math.cos((originalLat * Math.PI) / 180);
+  const newCos = Math.cos((newLat * Math.PI) / 180);
+  if (newCos === 0) return 1; // Avoid division by zero at poles
+  return originalCos / newCos;
+};
+
 const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
   coordinates,
   color = '#007bff',
@@ -20,12 +46,14 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<L.LatLng | null>(null);
   const [originalPositions, setOriginalPositions] = useState<L.LatLng[][]>([]);
+  const [originalCenter, setOriginalCenter] = useState<L.LatLng | null>(null);
 
   useEffect(() => {
     const positions = coordinates.map(ring => 
       ring.map(coord => new L.LatLng(coord[1], coord[0]))
     );
     setOriginalPositions(positions);
+    setOriginalCenter(calculateCenter(positions));
   }, [coordinates]);
 
   useEffect(() => {
@@ -42,7 +70,7 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
       };
 
       const handleMouseMove = (e: L.LeafletMouseEvent) => {
-        if (isDragging && dragStart && originalPositions.length > 0) {
+        if (isDragging && dragStart && originalPositions.length > 0 && originalCenter) {
           e.originalEvent.preventDefault();
           
           const offset = {
@@ -50,11 +78,35 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
             lng: e.latlng.lng - dragStart.lng
           };
 
+          // Calculate new center
+          const newCenter = new L.LatLng(
+            originalCenter.lat + offset.lat,
+            originalCenter.lng + offset.lng
+          );
+
+          // Calculate Mercator scale factor to maintain true area
+          const scale = getMercatorScale(originalCenter.lat, newCenter.lat);
+
+          // Transform positions: translate and scale to maintain true size
+          // In Mercator projection, area scales as 1/cos²(lat)
+          // To preserve true area when moving from originalLat to newLat:
+          // Scale factor = cos(originalLat) / cos(newLat) for area
+          // For linear dimensions, we use the square root
+          const linearScale = Math.sqrt(Math.abs(scale)); // Use absolute to handle negative cos values
+          
           const newPositions = originalPositions.map(ring =>
-            ring.map(pos => new L.LatLng(
-              pos.lat + offset.lat,
-              pos.lng + offset.lng
-            ))
+            ring.map(pos => {
+              // Calculate offset from original center
+              const latOffset = pos.lat - originalCenter.lat;
+              const lngOffset = pos.lng - originalCenter.lng;
+              
+              // Apply scaling and translation
+              // Scale both dimensions equally to preserve shape
+              return new L.LatLng(
+                newCenter.lat + latOffset * linearScale,
+                newCenter.lng + lngOffset * linearScale
+              );
+            })
           );
 
           polygon.setLatLngs(newPositions);
@@ -88,7 +140,7 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
         map.dragging.enable();
       };
     }
-  }, [map, isDragging, dragStart, originalPositions, onDragEnd]);
+  }, [map, isDragging, dragStart, originalPositions, originalCenter, onDragEnd]);
 
   const leafletPositions = coordinates.map(ring => 
     ring.map(coord => [coord[1], coord[0]] as [number, number])
