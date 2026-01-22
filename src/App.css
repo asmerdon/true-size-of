@@ -66,6 +66,10 @@
 .boundary-flag {
   font-size: 24px;
   line-height: 1;
+  display: inline-block;
+  min-width: 28px;
+  text-align: center;
+  font-style: normal;
 }
 
 .boundary-name {
@@ -149,14 +153,19 @@
   flex-wrap: wrap;
 }
 
-.footer-links a {
+.footer-link {
+  background: none;
+  border: none;
   color: rgba(255, 255, 255, 0.7);
   text-decoration: none;
   font-size: 13px;
+  cursor: pointer;
   transition: color 0.2s;
+  padding: 0;
+  font-family: inherit;
 }
 
-.footer-links a:hover {
+.footer-link:hover {
   color: white;
 }
 
@@ -339,4 +348,97 @@
   .sidebar-header h1 {
     font-size: 1.5rem;
   }
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: #2c3e50;
+  color: white;
+  border-radius: 12px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  padding: 0;
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-text {
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.modal-text p {
+  margin: 0 0 16px 0;
+}
+
+.modal-text p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-text ul,
+.modal-text ol {
+  margin: 16px 0;
+  padding-left: 24px;
+}
+
+.modal-text li {
+  margin-bottom: 8px;
+}
+
+.modal-text strong {
+  color: white;
+  font-weight: 600;
 }

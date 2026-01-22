@@ -88,13 +88,23 @@ export const extractCountryCode = (displayName: string): string | undefined => {
 };
 
 // Get flag emoji from country code
+// Using regional indicator symbols (flag emojis)
 export const getFlagEmoji = (countryCode?: string): string => {
   if (!countryCode || countryCode.length !== 2) return '🌍';
   
-  const codePoints = countryCode
-    .toUpperCase()
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
+  const upperCode = countryCode.toUpperCase();
   
-  return String.fromCodePoint(...codePoints);
+  // Convert country code to regional indicator symbols
+  // A = U+1F1E6, B = U+1F1E7, etc.
+  const base = 0x1F1E6; // Regional Indicator Symbol Letter A
+  const codePoints = upperCode
+    .split('')
+    .map(char => base + (char.charCodeAt(0) - 65)); // 65 is 'A' in ASCII
+  
+  try {
+    return String.fromCodePoint(...codePoints);
+  } catch (e) {
+    // Fallback: return country code if emoji fails
+    return upperCode;
+  }
 };

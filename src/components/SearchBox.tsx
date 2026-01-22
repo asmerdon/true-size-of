@@ -68,7 +68,7 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onLocationSelect, isLoading }) =>
       <input
         type="text"
         className="search-input"
-        placeholder="Search for a location (e.g., London, New York, Tokyo)..."
+        placeholder="Search for a location (e.g. London)"
         value={query}
         onChange={(e) => handleInputChange(e.target.value)}
         disabled={isLoading}
