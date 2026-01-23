@@ -97,17 +97,27 @@ export const fetchBoundary = async (osmId: number, osmType: string): Promise<Bou
             let center: [number, number] = [0, 0];
             let totalPoints = 0;
 
-            // Process all elements - handle both relations and ways
-            // The Overpass query with (._;>;) already expands relations to include member geometries
+            // Process elements - filter to avoid duplicates
+            // For relations, we only want the member ways (not the relation itself)
+            // Relations themselves don't have geometry, only their member ways do
+            const processedIds = new Set<number>();
+            
             data.elements.forEach(element => {
+              // Skip relation elements - they don't have meaningful geometry
+              // Only process ways which contain the actual boundary geometry
+              if (element.type === 'relation') {
+                return; // Skip relation elements, only process their member ways
+              }
+              
+              // Skip if we've already processed this element (avoid duplicates)
+              if (processedIds.has(element.id)) {
+                return;
+              }
+              
               if (element.geometry && element.geometry.length > 0) {
-                let coords = element.geometry.map(point => [point.lon, point.lat]);
-                
-                // Simplify geometry if it has too many points (improve performance)
-                if (coords.length > 1000) {
-                  coords = simplifyGeometry(coords, 0.0001);
-                  console.log(`Simplified geometry from ${element.geometry.length} to ${coords.length} points`);
-                }
+                // Use original detailed coordinates - no automatic simplification
+                // Simplification will only happen as a fallback if rendering is too slow
+                const coords = element.geometry.map(point => [point.lon, point.lat]);
                 
                 // Ensure polygon is closed (first point = last point)
                 if (coords.length > 0) {
@@ -118,6 +128,7 @@ export const fetchBoundary = async (osmId: number, osmType: string): Promise<Bou
                   }
                 }
                 coordinates.push(coords);
+                processedIds.add(element.id);
                 
                 element.geometry.forEach(point => {
                   center[0] += point.lon;
@@ -132,6 +143,7 @@ export const fetchBoundary = async (osmId: number, osmType: string): Promise<Bou
               center[1] /= totalPoints;
 
               console.log(`Successfully fetched boundary for ${osmType} ${osmId}: ${coordinates.length} rings, ${totalPoints} points`);
+              console.log(`Element types in response:`, data.elements.map(e => e.type).join(', '));
               
               return {
                 coordinates,

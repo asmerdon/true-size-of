@@ -159,8 +159,12 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
       }}
       eventHandlers={{
         click: () => {
-          if (polygonRef.current) {
-            polygonRef.current.bindPopup(name).openPopup();
+          if (polygonRef.current && originalCenter) {
+            // Open popup at the center of the polygon, not at click location
+            const popup = L.popup()
+              .setLatLng(originalCenter)
+              .setContent(name)
+              .openOn(map);
           }
         }
       }}
