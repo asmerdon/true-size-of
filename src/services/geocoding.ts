@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { NominatimResult, OverpassResponse, BoundaryData } from '../types';
+import { searchLocalGeoJson } from './localGeoJson';
 
 const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
 const OVERPASS_SERVERS = [
@@ -8,6 +9,8 @@ const OVERPASS_SERVERS = [
 ];
 
 // Simplify geometry by reducing point count (Douglas-Peucker-like simplification)
+// COMMENTED OUT - Not using simplification, keeping original detailed boundaries
+/*
 const simplifyGeometry = (coords: number[][], tolerance: number = 0.0001): number[][] => {
   if (coords.length <= 2) return coords;
   
@@ -32,6 +35,7 @@ const simplifyGeometry = (coords: number[][], tolerance: number = 0.0001): numbe
   simplified.push(coords[coords.length - 1]);
   return simplified;
 };
+*/
 
 export const searchLocation = async (query: string): Promise<NominatimResult[]> => {
   try {
@@ -49,9 +53,43 @@ export const searchLocation = async (query: string): Promise<NominatimResult[]> 
   }
 };
 
-export const fetchBoundary = async (osmId: number, osmType: string): Promise<BoundaryData | null> => {
+export const fetchBoundary = async (osmId: number, osmType: string, displayName?: string, resultClass?: string, resultType?: string): Promise<BoundaryData | null> => {
   try {
-    // Try Overpass API first - handle both relations and ways
+    // Only check local GeoJSON for explicit country-level results
+    // Countries typically have class="place" and type="country"
+    // Be very strict - only use local GeoJSON if it's explicitly a country
+    const isExplicitCountry = resultClass === 'place' && resultType === 'country';
+    
+    // Also allow if display_name is exactly a country name with no commas
+    // (this handles cases where the result might not have proper class/type)
+    const isExactCountryName = displayName && !displayName.includes(',');
+    
+    if (displayName && isExplicitCountry) {
+      // For explicit countries, try local GeoJSON first
+      const localResult = await searchLocalGeoJson(displayName);
+      if (localResult) {
+        // Verify it's an exact match
+        const countryNameLower = localResult.name.toLowerCase().trim();
+        const displayNameLower = displayName.toLowerCase().trim();
+        if (displayNameLower === countryNameLower) {
+          return localResult;
+        }
+      }
+    } else if (displayName && isExactCountryName) {
+      // For names without commas, check if it's a country (but be cautious)
+      const localResult = await searchLocalGeoJson(displayName);
+      if (localResult) {
+        // Only use if it's an exact match
+        const countryNameLower = localResult.name.toLowerCase().trim();
+        const displayNameLower = displayName.toLowerCase().trim();
+        if (displayNameLower === countryNameLower) {
+          return localResult;
+        }
+      }
+    }
+    // For all other cases (cities, regions, etc.), skip local GeoJSON and go straight to API
+    
+    // If not found locally, try Overpass API - handle both relations and ways
     // Most administrative boundaries are relations (multi-polygons)
     const queries = [
       // Try as relation first (most common for admin boundaries)
@@ -115,8 +153,7 @@ export const fetchBoundary = async (osmId: number, osmType: string): Promise<Bou
               }
               
               if (element.geometry && element.geometry.length > 0) {
-                // Use original detailed coordinates - no automatic simplification
-                // Simplification will only happen as a fallback if rendering is too slow
+                // Use original detailed coordinates - NO SIMPLIFICATION
                 const coords = element.geometry.map(point => [point.lon, point.lat]);
                 
                 // Ensure polygon is closed (first point = last point)
@@ -141,9 +178,6 @@ export const fetchBoundary = async (osmId: number, osmType: string): Promise<Bou
             if (coordinates.length > 0) {
               center[0] /= totalPoints;
               center[1] /= totalPoints;
-
-              console.log(`Successfully fetched boundary for ${osmType} ${osmId}: ${coordinates.length} rings, ${totalPoints} points`);
-              console.log(`Element types in response:`, data.elements.map(e => e.type).join(', '));
               
               return {
                 coordinates,

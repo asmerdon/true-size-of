@@ -19,14 +19,19 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      const boundaryData = await fetchBoundary(result.osm_id, result.osm_type);
+      // Pass display_name, class, and type to check local GeoJSON first (only for countries)
+      const boundaryData = await fetchBoundary(result.osm_id, result.osm_type, result.display_name, result.class, result.type);
       
       if (boundaryData) {
         boundaryData.name = result.display_name;
-        // Calculate area
-        boundaryData.area = calculateArea(boundaryData.coordinates);
-        // Extract country code for flag
-        boundaryData.countryCode = extractCountryCode(result.display_name);
+        // Calculate area (if not already calculated from local GeoJSON)
+        if (!boundaryData.area) {
+          boundaryData.area = calculateArea(boundaryData.coordinates);
+        }
+        // Extract country code for flag (if not already set from local GeoJSON)
+        if (!boundaryData.countryCode) {
+          boundaryData.countryCode = extractCountryCode(result.display_name);
+        }
         setBoundaries(prev => [...prev, boundaryData]);
       } else {
         setError('No boundary data found for this location. Try searching for a different place.');
