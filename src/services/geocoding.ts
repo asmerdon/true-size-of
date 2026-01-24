@@ -130,7 +130,7 @@ export const fetchBoundary = async (osmId: number, osmType: string, displayName?
 
           const data: OverpassResponse = response.data;
           
-          if (data.elements && data.elements.length > 0) {
+            if (data.elements && data.elements.length > 0) {
             const coordinates: number[][][] = [];
             let center: [number, number] = [0, 0];
             let totalPoints = 0;

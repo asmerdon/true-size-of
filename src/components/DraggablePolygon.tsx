@@ -146,6 +146,19 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
     ring.map(coord => [coord[1], coord[0]] as [number, number])
   );
 
+  // Use useEffect to ensure polygon is fully interactive after render
+  useEffect(() => {
+    if (polygonRef.current) {
+      const polygon = polygonRef.current;
+      // Ensure the polygon fill is interactive
+      // Use a higher opacity to ensure reliable click detection across the entire area
+      polygon.setStyle({
+        fillOpacity: 0.15, // Higher opacity ensures clicks work everywhere, still visually subtle
+        fillColor: color
+      });
+    }
+  }, [coordinates, color]);
+
   return (
     <Polygon
       ref={polygonRef}
@@ -153,9 +166,10 @@ const DraggablePolygon: React.FC<DraggablePolygonProps> = ({
       pathOptions={{
         color: color,
         weight: 3,
-        fillColor: 'transparent',
-        fillOpacity: 0,
-        interactive: true
+        fillColor: color, // Use same color as stroke for consistency
+        fillOpacity: 0.15, // Higher opacity - ensures reliable click detection, still visually subtle
+        interactive: true,
+        bubblingMouseEvents: false // Prevent events from bubbling to map
       }}
       eventHandlers={{
         click: () => {
