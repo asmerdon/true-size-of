@@ -44,8 +44,10 @@ async function loadGeoJson(): Promise<void> {
   isLoading = true;
   loadPromise = (async () => {
     try {
-      // Load from public folder (accessible at /custom.geo.json)
-      const response = await fetch('/custom.geo.json');
+      // Load from public folder
+      // Use process.env.PUBLIC_URL to handle GitHub Pages subpath correctly
+      const baseUrl = process.env.PUBLIC_URL || '';
+      const response = await fetch(`${baseUrl}/custom.geo.json`);
       if (!response.ok) {
         throw new Error(`Failed to load GeoJSON: ${response.statusText}`);
       }
